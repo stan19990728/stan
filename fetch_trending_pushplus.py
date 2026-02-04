@@ -10,6 +10,10 @@ import requests
 from datetime import datetime, timedelta
 from typing import List, Dict
 
+# 禁用 SSL 警告
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 TRENDING_API = "https://ghapi.huchen.dev/repositories"
 GITHUB_SEARCH_API = "https://api.github.com/search/repositories"
@@ -23,20 +27,25 @@ def fetch_trending_from_api(since='daily', n=20) -> List[Dict]:
     """从 GitHub Trending API 拉取项目。"""
     try:
         url = f"{TRENDING_API}?since={since}&spoken_language=&"
-        r = requests.get(url, timeout=15)
+        # 禁用 SSL 验证来规避 SSL 错误
+        r = requests.get(url, timeout=15, verify=False)
         r.raise_for_status()
         data = r.json()
         return data[:n] if isinstance(data, list) else []
     except Exception as e:
         print(f"fetch trending API failed: {e}")
-        return []
+        # 尝试备选 API
+        try:
+            return fetch_trending_via_search(n)
+        except:
+            return []
 
 
 def fetch_trending_via_search(n=10) -> List[Dict]:
     """通过 GitHub Search API 拉取最近创建的热门项目（备选）。"""
     try:
         # 拉取过去 7 天创建且 stars >= 10 的项目
-        created_after = (datetime.utcnow() - timedelta(days=7)).date().isoformat()
+        created_after = (datetime.now() - timedelta(days=7)).date().isoformat()
         query = f"created:>={created_after} stars:>=10 sort:stars-desc"
         
         headers = {}
@@ -47,7 +56,8 @@ def fetch_trending_via_search(n=10) -> List[Dict]:
             GITHUB_SEARCH_API,
             params={'q': query, 'sort': 'stars', 'order': 'desc', 'per_page': n},
             headers=headers,
-            timeout=15
+            timeout=15,
+            verify=False
         )
         r.raise_for_status()
         data = r.json()
@@ -157,7 +167,7 @@ def main():
         print('Error: No repos after filtering')
         sys.exit(1)
 
-    title = f" GitHub 每日热门项目 ({len(repos)}个)  {datetime.utcnow().date().isoformat()}"
+    title = f"🔥 GitHub 每日热门项目 ({len(repos)}个) — {datetime.now().date().isoformat()}"
     content = build_html(repos)
 
     print(f"Sending {len(repos)} repos to WeChat...")
