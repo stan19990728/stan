@@ -7,6 +7,7 @@
 import os
 import sys
 import requests
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict
 
@@ -47,11 +48,11 @@ def fetch_trending_via_search(n=10) -> List[Dict]:
         # 拉取过去 7 天创建且 stars >= 10 的项目
         created_after = (datetime.now() - timedelta(days=7)).date().isoformat()
         query = f"created:>={created_after} stars:>=10 sort:stars-desc"
-        
+
         headers = {}
         if GITHUB_TOKEN:
             headers['Authorization'] = f'token {GITHUB_TOKEN}'
-        
+
         r = requests.get(
             GITHUB_SEARCH_API,
             params={'q': query, 'sort': 'stars', 'order': 'desc', 'per_page': n},
@@ -75,7 +76,7 @@ def filter_interesting(repos: List[Dict], keywords=None) -> List[Dict]:
     if not keywords:
         # 默认保留所有（可根据需要加过滤，例如排除"awesome"/"list"等）
         return repos
-    
+
     filtered = []
     kw_lower = [k.lower() for k in keywords]
     for repo in repos:
@@ -84,6 +85,35 @@ def filter_interesting(repos: List[Dict], keywords=None) -> List[Dict]:
         if any(k in name or k in desc for k in kw_lower):
             filtered.append(repo)
     return filtered
+
+
+def get_readme_summary(repo_name: str, token: str = '') -> str:
+    """尝试从 GitHub 获取项目 README 的前 150 字符作为摘要。"""
+    try:
+        headers = {}
+        if token:
+            headers['Authorization'] = f'token {token}'
+        
+        # 尝试获取 README.md
+        url = f"https://api.github.com/repos/{repo_name}/readme"
+        r = requests.get(
+            url,
+            headers={**headers, 'Accept': 'application/vnd.github.v3.raw'},
+            timeout=5,
+            verify=False
+        )
+        if r.status_code == 200:
+            text = r.text
+            # 清理 markdown 语法，提取前 150 字符
+            text = re.sub(r'[#*`\[\]\(\)!]', '', text).strip()
+            # 去掉多余空白，取第一个有意义的句子或段落
+            lines = [l.strip() for l in text.split('\n') if l.strip()]
+            if lines:
+                summary = ' '.join(lines)
+                return (summary[:150] + '...' if len(summary) > 150 else summary)
+    except:
+        pass
+    return ''
 
 
 def build_html(repos):
@@ -95,12 +125,20 @@ def build_html(repos):
             desc = repo.get('description', '')
             stars = repo.get('stars', 0)
             language = repo.get('language', 'Unknown')
+            repo_name = f"{repo.get('author', '')}/{repo.get('name', '')}"
         else:
             name = repo.get('full_name', '')
             url = repo.get('html_url', '')
-            desc = repo.get('description', '') or '暂无描述'
+            desc = repo.get('description', '') or ''
             stars = repo.get('stargazers_count', 0)
             language = repo.get('language', 'Unknown')
+            repo_name = repo.get('full_name', '')
+        
+        # 如果描述为空或过短，尝试获取 README 摘要
+        if not desc or len(desc) < 30:
+            readme_summary = get_readme_summary(repo_name, GITHUB_TOKEN)
+            if readme_summary:
+                desc = readme_summary
         
         desc_display = (desc[:150] + '...' if len(desc) > 150 else desc) if desc else '暂无描述'
         
@@ -110,15 +148,14 @@ def build_html(repos):
             f'<b style="font-size: 16px; color: #24292e;">{i}. <a href="{url}" target="_blank" style="color: #0366d6; text-decoration: none;">{name}</a></b>'
             f'</p>'
             f'<p style="margin: 5px 0; color: #586069; font-size: 14px; line-height: 1.5;">'
-            f'📝 {desc_display}'
+            f' {desc_display}'
             f'</p>'
             f'<p style="margin: 8px 0 0 0; font-size: 13px; color: #666;">'
-            f'⭐ <b style="color: #ffc107;">{stars}</b> stars | 🔧 {language}'
+            f' <b style="color: #ffc107;">{stars}</b> stars |  {language}'
             f'</p>'
             f'</div>'
         )
     return ''.join(lines)
-
 
 
 def send_pushplus(token: str, title: str, content: str) -> Dict:
@@ -169,12 +206,12 @@ def main():
         print('Error: No repos after filtering')
         sys.exit(1)
 
-    title = f"🔥 GitHub 每日热门项目 ({len(repos)}个) — {datetime.now().date().isoformat()}"
+    title = f" GitHub 每日热门项目 ({len(repos)}个)  {datetime.now().date().isoformat()}"
     content = build_html(repos)
 
     print(f"Sending {len(repos)} repos to WeChat...")
     res = send_pushplus(token, title, content)
-    
+
     if 'error' in res:
         print(f"Error sending: {res}")
         sys.exit(1)
