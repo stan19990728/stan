@@ -185,6 +185,12 @@ def build_html(repos):
             if readme_summary:
                 desc = readme_summary
         
+        # 翻译成中文
+        if desc and len(desc) > 5:
+            desc_chinese = translate_to_chinese(desc)
+            if desc_chinese and desc_chinese != desc and len(desc_chinese) > 0:
+                desc = desc_chinese
+        
         desc_display = (desc[:150] + '...' if len(desc) > 150 else desc) if desc else '暂无描述'
         
         lines.append(
