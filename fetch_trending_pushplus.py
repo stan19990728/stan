@@ -116,6 +116,51 @@ def get_readme_summary(repo_name: str, token: str = '') -> str:
     return ''
 
 
+def translate_to_chinese(text: str) -> str:
+    """使用免费翻译 API 将英文翻译成中文。"""
+    if not text or len(text.strip()) < 5:
+        return text
+    
+    try:
+        # 使用百度翻译 API（免费）
+        url = "https://fanyi.baidu.com/v2transapi"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        data = {
+            'from': 'en',
+            'to': 'zh',
+            'query': text[:500],  # 限制长度
+            'simple_means_flag': '3',
+            'sign': '',
+            'token': ''
+        }
+        r = requests.post(url, headers=headers, data=data, timeout=8, verify=False)
+        if r.status_code == 200:
+            result = r.json()
+            if 'trans_result' in result and 'data' in result['trans_result']:
+                translated = result['trans_result']['data'][0].get('dst', '')
+                if translated:
+                    return translated
+    except:
+        pass
+    
+    # 备用：使用简单的字典翻译服务
+    try:
+        api_url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q={requests.utils.quote(text[:300])}"
+        r = requests.get(api_url, timeout=5, verify=False)
+        if r.status_code == 200:
+            result = r.json()
+            if result and len(result) > 0 and len(result[0]) > 0:
+                translated = ''.join([item[0] for item in result[0] if item[0]])
+                return translated
+    except:
+        pass
+    
+    return text  # 翻译失败，返回原文
+
+
+
 def build_html(repos):
     lines = []
     for i, repo in enumerate(repos, 1):
