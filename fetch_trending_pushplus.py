@@ -88,13 +88,12 @@ def filter_interesting(repos: List[Dict], keywords=None) -> List[Dict]:
 
 
 def get_readme_summary(repo_name: str, token: str = '') -> str:
-    """尝试从 GitHub 获取项目 README 的前 150 字符作为摘要。"""
+    """从 GitHub 获取项目 README 并提取详细信息（功能、特性、优势）。"""
     try:
         headers = {}
         if token:
             headers['Authorization'] = f'token {token}'
         
-        # 尝试获取 README.md
         url = f"https://api.github.com/repos/{repo_name}/readme"
         r = requests.get(
             url,
@@ -104,13 +103,40 @@ def get_readme_summary(repo_name: str, token: str = '') -> str:
         )
         if r.status_code == 200:
             text = r.text
-            # 清理 markdown 语法，提取前 150 字符
-            text = re.sub(r'[#*`\[\]\(\)!]', '', text).strip()
-            # 去掉多余空白，取第一个有意义的句子或段落
-            lines = [l.strip() for l in text.split('\n') if l.strip()]
-            if lines:
-                summary = ' '.join(lines)
-                return (summary[:150] + '...' if len(summary) > 150 else summary)
+            
+            # 清理 markdown 标记但保留内容结构
+            lines_raw = text.split('\n')
+            content_lines = []
+            
+            # 提取有意义的内容行
+            for line in lines_raw[:50]:  # 只看前50行
+                line = line.strip()
+                
+                # 跳过图片、链接定义、徽章等
+                if not line or line.startswith('![') or line.startswith('[!'):
+                    continue
+                if line.startswith('[![') or '](https://img.shields.io' in line:
+                    continue
+                    
+                # 清理 markdown 语法
+                line = re.sub(r'^#{1,6}\s+', '', line)  # 移除标题符号
+                line = re.sub(r'\*\*(.+?)\*\*', r'\1', line)  # 移除加粗
+                line = re.sub(r'\*(.+?)\*', r'\1', line)  # 移除斜体
+                line = re.sub(r'`(.+?)`', r'\1', line)  # 移除代码标记
+                line = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', line)  # 移除链接保留文本
+                
+                if len(line) > 10:  # 只保留有实际内容的行
+                    content_lines.append(line)
+                
+                if len(content_lines) >= 8:  # 最多8行有意义的内容
+                    break
+            
+            if content_lines:
+                # 拼接成摘要，限制在300字符以内
+                summary = ' '.join(content_lines)
+                if len(summary) > 300:
+                    summary = summary[:300] + '...'
+                return summary
     except:
         pass
     return ''
@@ -180,7 +206,7 @@ def build_html(repos):
             repo_name = repo.get('full_name', '')
         
         # 如果描述为空或过短，尝试获取 README 摘要
-        if not desc or len(desc) < 30:
+        if not desc or len(desc) < 80:
             readme_summary = get_readme_summary(repo_name, GITHUB_TOKEN)
             if readme_summary:
                 desc = readme_summary
@@ -191,7 +217,7 @@ def build_html(repos):
             if desc_chinese and desc_chinese != desc and len(desc_chinese) > 0:
                 desc = desc_chinese
         
-        desc_display = (desc[:150] + '...' if len(desc) > 150 else desc) if desc else '暂无描述'
+        desc_display = (desc[:300] + '...' if len(desc) > 300 else desc) if desc else '暂无描述'
         
         lines.append(
             f'<div style="margin: 15px 0; padding: 12px; border-left: 4px solid #0366d6; background: #f6f8fa;">'
