@@ -86,37 +86,39 @@ def filter_interesting(repos: List[Dict], keywords=None) -> List[Dict]:
     return filtered
 
 
-def build_html(repos: List[Dict]) -> str:
-    """构建 HTML 格式的推送内容。"""
+def build_html(repos):
     lines = []
     for i, repo in enumerate(repos, 1):
-        # 适配不同 API 返回格式
         if 'author' in repo and 'name' in repo:
-            # GitHub Trending API 格式
             name = f"{repo.get('author', '')}/{repo.get('name', '')}"
             url = repo.get('url', '')
             desc = repo.get('description', '')
-            stars = repo.get('stars', '')
-            language = repo.get('language', '')
+            stars = repo.get('stars', 0)
+            language = repo.get('language', 'Unknown')
         else:
-            # GitHub Search API 格式
             name = repo.get('full_name', '')
             url = repo.get('html_url', '')
             desc = repo.get('description', '') or '暂无描述'
             stars = repo.get('stargazers_count', 0)
             language = repo.get('language', 'Unknown')
         
-        # 截断过长描述
-        desc = (desc[:100] + '...' if len(desc) > 100 else desc) if desc else '暂无描述'
+        desc_display = (desc[:150] + '...' if len(desc) > 150 else desc) if desc else '暂无描述'
         
         lines.append(
-            f"<p style=\"margin: 10px 0;\">"
-            f"<b>{i}. <a href=\"{url}\" target=\"_blank\">{name}</a></b><br/>"
-            f" {desc}<br/>"
-            f" {stars} |  {language}"
-            f"</p>"
+            f'<div style="margin: 15px 0; padding: 12px; border-left: 4px solid #0366d6; background: #f6f8fa;">'
+            f'<p style="margin: 0 0 8px 0;">'
+            f'<b style="font-size: 16px; color: #24292e;">{i}. <a href="{url}" target="_blank" style="color: #0366d6; text-decoration: none;">{name}</a></b>'
+            f'</p>'
+            f'<p style="margin: 5px 0; color: #586069; font-size: 14px; line-height: 1.5;">'
+            f'📝 {desc_display}'
+            f'</p>'
+            f'<p style="margin: 8px 0 0 0; font-size: 13px; color: #666;">'
+            f'⭐ <b style="color: #ffc107;">{stars}</b> stars | 🔧 {language}'
+            f'</p>'
+            f'</div>'
         )
     return ''.join(lines)
+
 
 
 def send_pushplus(token: str, title: str, content: str) -> Dict:
