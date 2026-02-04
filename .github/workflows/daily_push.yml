@@ -1,0 +1,42 @@
+﻿name: Daily GitHub Trending Push (PushPlus)
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # 每天 01:00 UTC，约北京时间 09:00，可根据需要调整
+  workflow_dispatch:
+    inputs:
+      use_search_api:
+        description: 'Use GitHub Search API (instead of Trending API)'
+        required: false
+        default: 'false'
+      trend_count:
+        description: 'Number of repos to fetch (default: 10)'
+        required: false
+        default: '10'
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run push script
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          TREND_COUNT: '10'
+          USE_SEARCH_API: 'false'
+          KEYWORDS: ''  # 可选：按逗号分隔，例如 'python,machine-learning'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python fetch_trending_pushplus.py
